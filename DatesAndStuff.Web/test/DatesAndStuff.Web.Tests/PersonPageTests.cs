@@ -148,7 +148,7 @@ public class PersonPageTests
         submitButton.Click();
 
         // Assert
-        var expectedErrorFragment = "between -10 and infinity";
+        var expectedErrorFragment = "greater than -10.";
 
         wait.Until(ExpectedConditions.TextToBePresentInElementLocated(By.CssSelector(".validation-errors"), expectedErrorFragment));
         wait.Until(ExpectedConditions.TextToBePresentInElementLocated(By.CssSelector(".validation-message"), expectedErrorFragment));
