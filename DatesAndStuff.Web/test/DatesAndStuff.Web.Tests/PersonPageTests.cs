@@ -1,12 +1,11 @@
-using System;
 using System.Diagnostics;
-using System.Reflection;
 using System.Text;
 using FluentAssertions;
 using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
 using OpenQA.Selenium.Support.UI;
 using SeleniumExtras.WaitHelpers;
+using System.Globalization;
 
 namespace DatesAndStuff.Web.Tests;
 
@@ -103,19 +102,21 @@ public class PersonPageTests
         }
         Assert.That(verificationErrors.ToString(), Is.EqualTo(""));
     }
-
-    [Test]
-    public void Person_SalaryIncrease_ShouldIncrease()
+    
+    private static readonly double[] SalaryIncreaseTestCases = { 0d, 5d, 12.5d, -5d, -9.99d };
+    [TestCaseSource(nameof(SalaryIncreaseTestCases))]
+    public void Person_SalaryIncrease_ShouldIncrease(double salaryIncreasePercentage)
     {
         // Arrange
         driver.Navigate().GoToUrl(BaseURL);
         driver.FindElement(By.XPath("//*[@data-test='PersonPageNavigation']")).Click();
 
         var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(5));
+        const double initialSalary = 5000;
 
         var input = wait.Until(ExpectedConditions.ElementExists(By.XPath("//*[@data-test='SalaryIncreasePercentageInput']")));
         input.Clear();
-        input.SendKeys("5");
+        input.SendKeys(salaryIncreasePercentage.ToString(CultureInfo.InvariantCulture));
 
         // Act
         var submitButton = wait.Until(ExpectedConditions.ElementExists(By.XPath("//*[@data-test='SalaryIncreaseSubmitButton']")));
@@ -125,7 +126,8 @@ public class PersonPageTests
         // Assert
         var salaryLabel = wait.Until(ExpectedConditions.ElementExists(By.XPath("//*[@data-test='DisplayedSalary']")));
         var salaryAfterSubmission = double.Parse(salaryLabel.Text);
-        salaryAfterSubmission.Should().BeApproximately(5250, 0.001);
+        var expectedSalary = initialSalary * (100 + salaryIncreasePercentage) / 100;
+        salaryAfterSubmission.Should().BeApproximately(expectedSalary, 0.001);
     }
     private bool IsElementPresent(By by)
     {
