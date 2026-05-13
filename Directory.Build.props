@@ -1,0 +1,6 @@
+<Project>
+    <PropertyGroup>
+        <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
+        <LangVersion>preview</LangVersion>
+    </PropertyGroup>
+</Project>

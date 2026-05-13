@@ -23,24 +23,31 @@ public class PersonPageTests
     [OneTimeSetUp]
     public void StartBlazorServer()
     {
-        var webProjectPath = Path.GetFullPath(Path.Combine(
-            Assembly.GetExecutingAssembly().Location,
-            "../../../../../../src/DatesAndStuff.Web/DatesAndStuff.Web.csproj"
-            ));
+        var testDir = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
+        DirectoryInfo? dir = testDir;
+        while (dir != null && !File.Exists(Path.Combine(dir.FullName, "VerVal.sln")))
+        {
+            dir = dir.Parent;
+        }
 
-        var webProjFolderPath = Path.GetDirectoryName(webProjectPath);
+        var webProjectPath = Path.Combine(dir.FullName, "DatesAndStuff.Web", "src", "DatesAndStuff.Web", "DatesAndStuff.Web.csproj");
+        if (!File.Exists(webProjectPath))
+        {
+            throw new FileNotFoundException("Could not find web project file at expected path: " + webProjectPath);
+        }
 
+        var webProjFolderPath = Path.GetDirectoryName(webProjectPath) ?? dir.FullName;
+        
         var startInfo = new ProcessStartInfo
         {
             FileName = "dotnet",
-            //Arguments = $"run --project \"{webProjectPath}\"",
-            Arguments = "dotnet run --no-build",
-            WorkingDirectory = webProjFolderPath,
+            Arguments = $"run --no-build --project \"{webProjectPath}\" --urls \"{BaseURL}\"",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            UseShellExecute = false
+            UseShellExecute = false,
+            WorkingDirectory = webProjFolderPath
         };
-
+        
         _blazorProcess = Process.Start(startInfo);
 
         // Wait for the app to become available
