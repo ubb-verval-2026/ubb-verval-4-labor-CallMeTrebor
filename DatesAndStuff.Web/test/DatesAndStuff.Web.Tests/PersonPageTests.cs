@@ -1,6 +1,5 @@
-using System;
 using System.Diagnostics;
-using System.Reflection;
+using System.Globalization;
 using System.Text;
 using FluentAssertions;
 using OpenQA.Selenium;
@@ -23,22 +22,29 @@ public class PersonPageTests
     [OneTimeSetUp]
     public void StartBlazorServer()
     {
-        var webProjectPath = Path.GetFullPath(Path.Combine(
-            Assembly.GetExecutingAssembly().Location,
-            "../../../../../../src/DatesAndStuff.Web/DatesAndStuff.Web.csproj"
-            ));
+        var testDir = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
+        DirectoryInfo? dir = testDir;
+        while (dir != null && !File.Exists(Path.Combine(dir.FullName, "VerVal.sln")))
+        {
+            dir = dir.Parent;
+        }
 
-        var webProjFolderPath = Path.GetDirectoryName(webProjectPath);
+        var webProjectPath = Path.Combine(dir.FullName, "DatesAndStuff.Web", "src", "DatesAndStuff.Web", "DatesAndStuff.Web.csproj");
+        if (!File.Exists(webProjectPath))
+        {
+            throw new FileNotFoundException("Could not find web project file at expected path: " + webProjectPath);
+        }
+
+        var webProjFolderPath = Path.GetDirectoryName(webProjectPath) ?? dir.FullName;
 
         var startInfo = new ProcessStartInfo
         {
             FileName = "dotnet",
-            //Arguments = $"run --project \"{webProjectPath}\"",
-            Arguments = "dotnet run --no-build",
-            WorkingDirectory = webProjFolderPath,
+            Arguments = $"run --no-build --project \"{webProjectPath}\" --urls \"{BaseURL}\"",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            UseShellExecute = false
+            UseShellExecute = false,
+            WorkingDirectory = webProjFolderPath
         };
 
         _blazorProcess = Process.Start(startInfo);
@@ -97,18 +103,20 @@ public class PersonPageTests
         Assert.That(verificationErrors.ToString(), Is.EqualTo(""));
     }
 
-    [Test]
-    public void Person_SalaryIncrease_ShouldIncrease()
+    private static readonly double[] SalaryIncreaseTestCases = { 0d, 5d, 12.5d, -5d, -9.99d };
+    [TestCaseSource(nameof(SalaryIncreaseTestCases))]
+    public void Person_SalaryIncrease_ShouldIncrease(double salaryIncreasePercentage)
     {
         // Arrange
         driver.Navigate().GoToUrl(BaseURL);
         driver.FindElement(By.XPath("//*[@data-test='PersonPageNavigation']")).Click();
 
         var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(5));
+        const double initialSalary = 5000;
 
         var input = wait.Until(ExpectedConditions.ElementExists(By.XPath("//*[@data-test='SalaryIncreasePercentageInput']")));
         input.Clear();
-        input.SendKeys("5");
+        input.SendKeys(salaryIncreasePercentage.ToString(CultureInfo.InvariantCulture));
 
         // Act
         var submitButton = wait.Until(ExpectedConditions.ElementExists(By.XPath("//*[@data-test='SalaryIncreaseSubmitButton']")));
@@ -118,7 +126,112 @@ public class PersonPageTests
         // Assert
         var salaryLabel = wait.Until(ExpectedConditions.ElementExists(By.XPath("//*[@data-test='DisplayedSalary']")));
         var salaryAfterSubmission = double.Parse(salaryLabel.Text);
-        salaryAfterSubmission.Should().BeApproximately(5250, 0.001);
+        var expectedSalary = initialSalary * (100 + salaryIncreasePercentage) / 100;
+        salaryAfterSubmission.Should().BeApproximately(expectedSalary, 0.001);
+    }
+
+    [Test]
+    public void Person_SalaryIncrease_BelowMinusTen_ShouldShowValidationMessages()
+    {
+        // Arrange
+        driver.Navigate().GoToUrl(BaseURL);
+        driver.FindElement(By.XPath("//*[@data-test='PersonPageNavigation']")).Click();
+
+        var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(5));
+
+        var input = wait.Until(ExpectedConditions.ElementExists(By.XPath("//*[@data-test='SalaryIncreasePercentageInput']")));
+        input.Clear();
+        input.SendKeys("-11");
+
+        // Act
+        var submitButton = wait.Until(ExpectedConditions.ElementExists(By.XPath("//*[@data-test='SalaryIncreaseSubmitButton']")));
+        submitButton.Click();
+
+        // Assert
+        var expectedErrorFragment = "greater than -10.";
+
+        wait.Until(ExpectedConditions.TextToBePresentInElementLocated(By.CssSelector(".validation-errors"), expectedErrorFragment));
+        wait.Until(ExpectedConditions.TextToBePresentInElementLocated(By.CssSelector(".validation-message"), expectedErrorFragment));
+
+        var summary = driver.FindElement(By.CssSelector(".validation-errors"));
+        var fieldMessage = driver.FindElement(By.CssSelector(".validation-message"));
+
+        summary.Text.Should().Contain(expectedErrorFragment);
+        fieldMessage.Text.Should().Contain(expectedErrorFragment);
+    }
+
+    private const decimal PriceThreshold = 205m;
+
+    [Test]
+    public void BlazeDemo_MexicoCityToDublin_ShouldHaveAtLeastThreeFlights()
+    {
+        // Arrange
+        driver.Navigate().GoToUrl("https://blazedemo.com/");
+
+        var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(10));
+        var fromSelect = wait.Until(ExpectedConditions.ElementExists(By.Name("fromPort")));
+        var toSelect = wait.Until(ExpectedConditions.ElementExists(By.Name("toPort")));
+
+        fromSelect.FindElement(By.XPath(".//option[normalize-space()='Mexico City']")).Click();
+        toSelect.FindElement(By.XPath(".//option[normalize-space()='Dublin']")).Click();
+
+        // Act
+        var findFlights = wait.Until(ExpectedConditions.ElementExists(By.CssSelector("input[type='submit']")));
+        findFlights.Click();
+
+        // Assert
+        var rows = wait.Until(d => d.FindElements(By.CssSelector("table tbody tr")));
+        rows.Count.Should().BeGreaterThanOrEqualTo(3);
+
+        var hasCheapFlight = false;
+        foreach (var row in rows)
+        {
+            if (TryGetPrice(row, out var price) && price < PriceThreshold)
+            {
+                hasCheapFlight = true;
+                break;
+            }
+        }
+
+        if (hasCheapFlight)
+        {
+            var screenshotPath = SaveScreenshot("blazedemo-dublin");
+            TestContext.WriteLine($"Screenshot saved to: {screenshotPath}");
+        }
+    }
+
+    private static bool TryGetPrice(IWebElement row, out decimal price)
+    {
+        price = 0m;
+        var cells = row.FindElements(By.CssSelector("td"));
+        if (cells.Count == 0)
+        {
+            return false;
+        }
+
+        var priceText = cells[^1].Text.Replace("$", string.Empty).Trim();
+        return decimal.TryParse(priceText, NumberStyles.Any, CultureInfo.InvariantCulture, out price);
+    }
+
+    private string SaveScreenshot(string filePrefix)
+    {
+        if (driver is not ITakesScreenshot screenshotDriver)
+        {
+            return string.Empty;
+        }
+
+        var desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        if (string.IsNullOrWhiteSpace(desktopPath))
+        {
+            desktopPath = TestContext.CurrentContext.WorkDirectory;
+        }
+
+        Directory.CreateDirectory(desktopPath);
+
+        var fileName = $"{filePrefix}-{DateTime.Now:yyyyMMdd-HHmmss}.png";
+        var filePath = Path.Combine(desktopPath, fileName);
+        screenshotDriver.GetScreenshot().SaveAsFile(filePath);
+        return filePath;
     }
     private bool IsElementPresent(By by)
     {
