@@ -159,6 +159,28 @@ public class PersonPageTests
         summary.Text.Should().Contain(expectedErrorFragment);
         fieldMessage.Text.Should().Contain(expectedErrorFragment);
     }
+
+    [Test]
+    public void BlazeDemo_MexicoCityToDublin_ShouldHaveAtLeastThreeFlights()
+    {
+        // Arrange
+        driver.Navigate().GoToUrl("https://blazedemo.com/");
+
+        var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(10));
+        var fromSelect = wait.Until(ExpectedConditions.ElementExists(By.Name("fromPort")));
+        var toSelect = wait.Until(ExpectedConditions.ElementExists(By.Name("toPort")));
+
+        fromSelect.FindElement(By.XPath(".//option[normalize-space()='Mexico City']")).Click();
+        toSelect.FindElement(By.XPath(".//option[normalize-space()='Dublin']")).Click();
+
+        // Act
+        var findFlights = wait.Until(ExpectedConditions.ElementExists(By.CssSelector("input[type='submit']")));
+        findFlights.Click();
+
+        // Assert
+        var rows = wait.Until(d => d.FindElements(By.CssSelector("table tbody tr")));
+        rows.Count.Should().BeGreaterThanOrEqualTo(3);
+    }
     private bool IsElementPresent(By by)
     {
         try
