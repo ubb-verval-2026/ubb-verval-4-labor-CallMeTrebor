@@ -36,7 +36,7 @@ public class PersonPageTests
         }
 
         var webProjFolderPath = Path.GetDirectoryName(webProjectPath) ?? dir.FullName;
-        
+
         var startInfo = new ProcessStartInfo
         {
             FileName = "dotnet",
@@ -46,7 +46,7 @@ public class PersonPageTests
             UseShellExecute = false,
             WorkingDirectory = webProjFolderPath
         };
-        
+
         _blazorProcess = Process.Start(startInfo);
 
         // Wait for the app to become available
@@ -102,7 +102,7 @@ public class PersonPageTests
         }
         Assert.That(verificationErrors.ToString(), Is.EqualTo(""));
     }
-    
+
     private static readonly double[] SalaryIncreaseTestCases = { 0d, 5d, 12.5d, -5d, -9.99d };
     [TestCaseSource(nameof(SalaryIncreaseTestCases))]
     public void Person_SalaryIncrease_ShouldIncrease(double salaryIncreasePercentage)
@@ -160,6 +160,8 @@ public class PersonPageTests
         fieldMessage.Text.Should().Contain(expectedErrorFragment);
     }
 
+    private const decimal PriceThreshold = 205m;
+
     [Test]
     public void BlazeDemo_MexicoCityToDublin_ShouldHaveAtLeastThreeFlights()
     {
@@ -180,6 +182,56 @@ public class PersonPageTests
         // Assert
         var rows = wait.Until(d => d.FindElements(By.CssSelector("table tbody tr")));
         rows.Count.Should().BeGreaterThanOrEqualTo(3);
+
+        var hasCheapFlight = false;
+        foreach (var row in rows)
+        {
+            if (TryGetPrice(row, out var price) && price < PriceThreshold)
+            {
+                hasCheapFlight = true;
+                break;
+            }
+        }
+
+        if (hasCheapFlight)
+        {
+            var screenshotPath = SaveScreenshot("blazedemo-dublin");
+            TestContext.WriteLine($"Screenshot saved to: {screenshotPath}");
+        }
+    }
+
+    private static bool TryGetPrice(IWebElement row, out decimal price)
+    {
+        price = 0m;
+        var cells = row.FindElements(By.CssSelector("td"));
+        if (cells.Count == 0)
+        {
+            return false;
+        }
+
+        var priceText = cells[^1].Text.Replace("$", string.Empty).Trim();
+        return decimal.TryParse(priceText, NumberStyles.Any, CultureInfo.InvariantCulture, out price);
+    }
+
+    private string SaveScreenshot(string filePrefix)
+    {
+        if (driver is not ITakesScreenshot screenshotDriver)
+        {
+            return string.Empty;
+        }
+
+        var desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        if (string.IsNullOrWhiteSpace(desktopPath))
+        {
+            desktopPath = TestContext.CurrentContext.WorkDirectory;
+        }
+
+        Directory.CreateDirectory(desktopPath);
+
+        var fileName = $"{filePrefix}-{DateTime.Now:yyyyMMdd-HHmmss}.png";
+        var filePath = Path.Combine(desktopPath, fileName);
+        screenshotDriver.GetScreenshot().SaveAsFile(filePath);
+        return filePath;
     }
     private bool IsElementPresent(By by)
     {
