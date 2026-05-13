@@ -1,11 +1,11 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using FluentAssertions;
 using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
 using OpenQA.Selenium.Support.UI;
 using SeleniumExtras.WaitHelpers;
-using System.Globalization;
 
 namespace DatesAndStuff.Web.Tests;
 
@@ -128,6 +128,36 @@ public class PersonPageTests
         var salaryAfterSubmission = double.Parse(salaryLabel.Text);
         var expectedSalary = initialSalary * (100 + salaryIncreasePercentage) / 100;
         salaryAfterSubmission.Should().BeApproximately(expectedSalary, 0.001);
+    }
+
+    [Test]
+    public void Person_SalaryIncrease_BelowMinusTen_ShouldShowValidationMessages()
+    {
+        // Arrange
+        driver.Navigate().GoToUrl(BaseURL);
+        driver.FindElement(By.XPath("//*[@data-test='PersonPageNavigation']")).Click();
+
+        var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(5));
+
+        var input = wait.Until(ExpectedConditions.ElementExists(By.XPath("//*[@data-test='SalaryIncreasePercentageInput']")));
+        input.Clear();
+        input.SendKeys("-11");
+
+        // Act
+        var submitButton = wait.Until(ExpectedConditions.ElementExists(By.XPath("//*[@data-test='SalaryIncreaseSubmitButton']")));
+        submitButton.Click();
+
+        // Assert
+        var expectedErrorFragment = "between -10 and infinity";
+
+        wait.Until(ExpectedConditions.TextToBePresentInElementLocated(By.CssSelector(".validation-errors"), expectedErrorFragment));
+        wait.Until(ExpectedConditions.TextToBePresentInElementLocated(By.CssSelector(".validation-message"), expectedErrorFragment));
+
+        var summary = driver.FindElement(By.CssSelector(".validation-errors"));
+        var fieldMessage = driver.FindElement(By.CssSelector(".validation-message"));
+
+        summary.Text.Should().Contain(expectedErrorFragment);
+        fieldMessage.Text.Should().Contain(expectedErrorFragment);
     }
     private bool IsElementPresent(By by)
     {
